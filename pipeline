@@ -1,0 +1,73 @@
+# -*- coding: utf-8 -*-
+
+import MySQLdb
+from twopoint.spiders.twop import TwopSpider
+
+class TwopointPipeline(object):
+    def process_item(self, item, spider):
+        pass
+    def close_spider(self, spider):
+        print('数据开始存入MySQL----------------------------------')
+        path = TwopSpider.path
+        connect = MySQLdb.connect(  
+            user = "root",  
+            password = "hanjingdemysql", 
+            port = 3306,  
+            host = "127.0.0.1",  
+            db = "MYSQL",  
+            charset = "utf8"  
+            )  
+        con = connect.cursor()   
+        con.execute("create database if not exists Twopoint")
+        con.execute("use Twopoint")
+        tb_name ="twop_info" 
+        sql = f"create table if not exists {tb_name}(id int not null primary key,name varchar(60),price varchar(10),weight varchar(10),\
+        img TEXT)ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1"
+        con.execute(sql)
+        #从过度表中提取数据存入mysql
+        with open(path,"r",encoding='utf-8') as f:  
+            while True:  
+                info = f.readline()  
+                if info:  
+                    info = info.strip()  
+                    info = info.split(",") 
+                    name = info[0]
+                    price = info[1]
+                    weight = info[2]
+                    pro_id = info[3]
+                    img = info[4]
+                    
+                    con.execute(f"replace into {tb_name}(name,price,weight,id,img) values(%s,%s,%s,%s,%s)",
+                    	[name,price,weight,pro_id,img]) 
+                else:  
+                    break 
+
+
+        tb_name2="twop_info2"
+        sql2=f"create table if not exists {tb_name2}(id int,specification varchar(30),brand varchar(30)\
+        )ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1"
+        con.execute(sql2)
+        with open('表二'+path,"r",encoding='utf-8') as f:  
+            while True:  
+                info = f.readline()  
+                if info:  
+                    info = info.strip()  
+                    info = info.split(",") 
+                    pro_id = info[0]
+                    specification = info[1]
+                    brand = info[2]
+                    
+                    con.execute(f"insert into {tb_name2}(id,specification,brand) values(%s,%s,%s)",
+                    	[pro_id,specification,brand]) 
+                else:  
+                    break
+        #建立表见连接，存入新表。导出为csv文件
+        con.execute("create table twopoint select a.id,b.brand,a.name,b.specification,a.weight,a.price,a.img from twop_info a left join twop_info2 b on a.id=b.id")
+        con.execute('''select * from twopoint into outfile 'D://twopoint.csv'  FIELDS TERMINATED BY ','   OPTIONALLY ENCLOSED BY '"'   LINES TERMINATED BY '\n';'''）
+
+
+        connect.commit()
+
+        con.close()
+        connect.close()
+        print(f'数据已存入MySQL表{tb_name}------------------------') 
